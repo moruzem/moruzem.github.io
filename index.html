@@ -292,6 +292,22 @@ applyUserColors()
 
 })
 
+box.querySelectorAll("[data-userhex]").forEach(el=>{
+
+el.addEventListener("input",e=>{
+
+const name=e.target.dataset.userhex
+const color=e.target.value
+
+config.users[name]=color
+document.querySelector('[data-user="'+name+'"]').value=color
+
+applyUserColors()
+
+})
+
+})
+
 }
 
 function applyUserColors(){
@@ -338,10 +354,13 @@ box.innerHTML=""
 tabs.forEach(tab=>{
 
 config.tabs[tab]={
+
 indent:tab-1,
 border:true,
-borderColor:"#cccccc",
-background:"#fafafa"
+borderColor:"#e2e3e4",
+background:"#fafafa",
+same:false
+
 }
 
 const div=document.createElement("div")
@@ -358,9 +377,15 @@ div.innerHTML=
 '<span id="indent'+tab+'">'+(tab-1)+'</span>'+
 '</div>'+
 
-'枠色 <input type="color" value="#cccccc" data-bordercolor="'+tab+'"> '+
+'┃ 枠ON <input type="checkbox" data-border="'+tab+'" checked><br>'+
 
-'背景色 <input type="color" value="#fafafa" data-bg="'+tab+'">'
+'枠色 <input type="color" value="#e2e3e4" data-bordercolor="'+tab+'"> '+
+'<input value="#e2e3e4" data-borderhex="'+tab+'"><br>'+
+
+'背景色 <input type="color" value="#fafafa" data-bg="'+tab+'"> '+
+'<input value="#fafafa" data-bghex="'+tab+'"><br>'+
+
+'ページ背景と同じ <input type="checkbox" data-same="'+tab+'">'
 
 box.appendChild(div)
 
@@ -377,6 +402,15 @@ document.querySelectorAll("[data-tab]").forEach(sl=>{
 sl.addEventListener("input",e=>{
 const tab=e.target.dataset.tab
 config.tabs[tab].indent=e.target.value
+document.getElementById("indent"+tab).textContent=e.target.value
+applyTabStyles()
+})
+})
+
+document.querySelectorAll("[data-border]").forEach(el=>{
+el.addEventListener("change",e=>{
+const tab=e.target.dataset.border
+config.tabs[tab].border=e.target.checked
 applyTabStyles()
 })
 })
@@ -385,6 +419,16 @@ document.querySelectorAll("[data-bordercolor]").forEach(el=>{
 el.addEventListener("input",e=>{
 const tab=e.target.dataset.bordercolor
 config.tabs[tab].borderColor=e.target.value
+document.querySelector('[data-borderhex="'+tab+'"]').value=e.target.value
+applyTabStyles()
+})
+})
+
+document.querySelectorAll("[data-borderhex]").forEach(el=>{
+el.addEventListener("input",e=>{
+const tab=e.target.dataset.borderhex
+config.tabs[tab].borderColor=e.target.value
+document.querySelector('[data-bordercolor="'+tab+'"]').value=e.target.value
 applyTabStyles()
 })
 })
@@ -393,6 +437,24 @@ document.querySelectorAll("[data-bg]").forEach(el=>{
 el.addEventListener("input",e=>{
 const tab=e.target.dataset.bg
 config.tabs[tab].background=e.target.value
+document.querySelector('[data-bghex="'+tab+'"]').value=e.target.value
+applyTabStyles()
+})
+})
+
+document.querySelectorAll("[data-bghex]").forEach(el=>{
+el.addEventListener("input",e=>{
+const tab=e.target.dataset.bghex
+config.tabs[tab].background=e.target.value
+document.querySelector('[data-bg="'+tab+'"]').value=e.target.value
+applyTabStyles()
+})
+})
+
+document.querySelectorAll("[data-same]").forEach(el=>{
+el.addEventListener("change",e=>{
+const tab=e.target.dataset.same
+config.tabs[tab].same=e.target.checked
 applyTabStyles()
 })
 })
@@ -414,8 +476,8 @@ doc.head.appendChild(style)
 let css=":root{"
 
 tabs.forEach(tab=>{
-const c=config.tabs[tab]
 
+const c=config.tabs[tab]
 css+=`--color-${String(tab).padStart(2,"0")}:${c.borderColor};`
 
 })
@@ -425,13 +487,14 @@ css+="}"
 tabs.forEach(tab=>{
 
 const c=config.tabs[tab]
+const bg=c.same ? config.pageColor : c.background
 
 css+=`
 
 .chatlog .tab${tab}{
-margin-left:${c.indent*3}em !important;
-background:${c.background};
-border-left:4px solid ${c.borderColor};
+margin-left:${c.indent*4}em !important;
+background:${bg};
+${c.border ? `border-left:4px solid ${c.borderColor};`:"border-left:none;"}
 padding-left:4px;
 }
 
@@ -444,13 +507,29 @@ style.innerHTML=css
 }
 
 function indentUp(tab){
+
 config.tabs[tab].indent++
 applyTabStyles()
+updateSlider(tab)
+
 }
 
 function indentDown(tab){
-if(config.tabs[tab].indent>0) config.tabs[tab].indent--
+
+if(config.tabs[tab].indent>0){
+config.tabs[tab].indent--
+}
+
 applyTabStyles()
+updateSlider(tab)
+
+}
+
+function updateSlider(tab){
+
+document.querySelector('[data-tab="'+tab+'"]').value=config.tabs[tab].indent
+document.getElementById("indent"+tab).textContent=config.tabs[tab].indent
+
 }
 
 function syncPageColor(e){
@@ -511,6 +590,12 @@ reader.readAsText(e.target.files[0])
 function saveHTML(){
 
 const html=doc.documentElement.cloneNode(true)
+
+const style=doc.getElementById("editor-style")
+
+if(style){
+html.querySelector("head").appendChild(style.cloneNode(true))
+}
 
 const blob=new Blob([html.outerHTML],{type:"text/html"})
 
