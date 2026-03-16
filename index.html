@@ -1,0 +1,537 @@
+```html
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Tekey Log Editor</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<style>
+
+body{
+margin:0;
+font-family:"Segoe UI","Noto Sans JP",sans-serif;
+height:100vh;
+display:flex;
+background:#e9edf3;
+color:#2c2f33;
+}
+
+#left{
+width:380px;
+background:#f7f9fc;
+padding:16px;
+overflow:auto;
+border-right:1px solid #d8dee8;
+box-shadow:2px 0 6px rgba(0,0,0,0.05);
+}
+
+#right{
+flex:1;
+display:flex;
+flex-direction:column;
+background:#ffffff;
+}
+
+iframe{
+flex:1;
+border:none;
+background:white;
+}
+
+.section{
+margin-bottom:20px;
+padding:14px;
+background:white;
+border-radius:8px;
+box-shadow:0 2px 6px rgba(0,0,0,0.05);
+}
+
+h3{
+margin:0 0 10px 0;
+font-size:14px;
+font-weight:600;
+color:#3a3f45;
+}
+
+input{
+margin:2px 0;
+padding:4px 6px;
+border-radius:4px;
+border:1px solid #cfd6e0;
+font-size:13px;
+}
+
+input[type=color]{
+height:26px;
+padding:2px;
+}
+
+button{
+background:#4a6cf7;
+color:white;
+border:none;
+padding:6px 10px;
+border-radius:6px;
+font-size:13px;
+cursor:pointer;
+transition:0.15s;
+}
+
+button:hover{
+background:#3653d8;
+}
+
+.tabBox{
+border:1px solid #e1e6ef;
+padding:10px;
+margin-bottom:10px;
+border-radius:6px;
+background:#fbfcff;
+}
+
+.sliderRow{
+display:flex;
+align-items:center;
+gap:6px;
+margin-bottom:6px;
+}
+
+.sliderRow button{
+padding:3px 6px;
+font-size:12px;
+background:#6c7cff;
+}
+
+.sliderRow input[type=range]{
+flex:1;
+}
+
+#userList div{
+display:flex;
+align-items:center;
+gap:6px;
+margin-bottom:4px;
+}
+
+#tabSettings b{
+display:block;
+margin-bottom:4px;
+font-size:13px;
+}
+
+</style>
+
+</head>
+<body>
+
+<div id="left">
+
+<div class="section">
+<h3>ログ読み込み</h3>
+<input type="file" id="logFile">
+</div>
+
+<div class="section">
+<h3>出力ファイル名</h3>
+<input id="filename" value="log_edit">
+</div>
+
+<div class="section">
+<h3>ページ背景</h3>
+<input type="color" id="pageColor" value="#ffffff">
+<input id="pageHex" value="#ffffff">
+</div>
+
+<div class="section">
+<h3>発言者カラー</h3>
+<div id="userList"></div>
+</div>
+
+<div class="section">
+<h3>タブ設定</h3>
+<div id="tabSettings"></div>
+</div>
+
+<div class="section">
+<h3>テーマ</h3>
+<button onclick="saveTheme()">テーマ保存</button>
+<input type="file" id="loadTheme">
+</div>
+
+<div class="section">
+<h3>出力</h3>
+<button onclick="saveHTML()">HTML保存</button>
+<button onclick="savePDF()">PDF保存</button>
+</div>
+
+</div>
+
+<div id="right">
+<iframe id="preview"></iframe>
+</div>
+
+<script>
+
+const iframe=document.getElementById("preview")
+
+let doc
+let users={}
+let tabs=[]
+
+let config={
+pageColor:"#ffffff",
+users:{},
+tabs:{}
+}
+
+document.getElementById("logFile").addEventListener("change",loadLog)
+document.getElementById("pageColor").addEventListener("input",syncPageColor)
+document.getElementById("pageHex").addEventListener("input",syncPageHex)
+document.getElementById("loadTheme").addEventListener("change",loadTheme)
+
+function loadLog(e){
+
+const file=e.target.files[0]
+const reader=new FileReader()
+
+reader.onload=ev=>{
+iframe.srcdoc=ev.target.result
+iframe.onload=initEditor
+}
+
+reader.readAsText(file)
+
+}
+
+function initEditor(){
+
+doc=iframe.contentDocument
+
+fixFontSize()
+
+detectUsers()
+detectTabs()
+applyPageColor()
+
+}
+
+function fixFontSize(){
+
+const style=doc.createElement("style")
+
+style.innerHTML=`
+
+.chatlog div{
+font-size:1em !important;
+}
+
+.chatlog div:not(.tab1){
+font-size:1em !important;
+}
+
+`
+
+doc.head.appendChild(style)
+
+}
+
+function detectUsers(){
+
+users={}
+
+doc.querySelectorAll(".chatlog div").forEach(el=>{
+
+const b=el.querySelector("b")
+if(!b)return
+
+const name=b.textContent.replace("：","")
+const color=el.style.color || "#000000"
+
+if(!users[name]) users[name]=color
+
+})
+
+renderUsers()
+
+}
+
+function renderUsers(){
+
+const box=document.getElementById("userList")
+box.innerHTML=""
+
+Object.keys(users).forEach(name=>{
+
+config.users[name]=users[name]
+
+const div=document.createElement("div")
+
+div.innerHTML=
+name+
+' <input type="color" value="'+users[name]+'" data-user="'+name+'">'+
+' <input value="'+users[name]+'" data-userhex="'+name+'">'
+
+box.appendChild(div)
+
+})
+
+box.querySelectorAll("[data-user]").forEach(el=>{
+
+el.addEventListener("input",e=>{
+
+const name=e.target.dataset.user
+const color=e.target.value
+
+config.users[name]=color
+document.querySelector('[data-userhex="'+name+'"]').value=color
+
+applyUserColors()
+
+})
+
+})
+
+}
+
+function applyUserColors(){
+
+doc.querySelectorAll(".chatlog div").forEach(el=>{
+
+const b=el.querySelector("b")
+if(!b)return
+
+const name=b.textContent.replace("：","")
+
+if(config.users[name]){
+
+el.style.color=config.users[name]
+
+}
+
+})
+
+}
+
+function detectTabs(){
+
+const set=new Set()
+
+doc.querySelectorAll(".chatlog div").forEach(el=>{
+
+const m=el.className.match(/tab(\d+)/)
+if(m)set.add(Number(m[1]))
+
+})
+
+tabs=[...set].sort((a,b)=>a-b)
+
+renderTabs()
+
+}
+
+function renderTabs(){
+
+const box=document.getElementById("tabSettings")
+box.innerHTML=""
+
+tabs.forEach(tab=>{
+
+config.tabs[tab]={
+indent:tab-1,
+border:true,
+borderColor:"#cccccc",
+background:"#fafafa"
+}
+
+const div=document.createElement("div")
+div.className="tabBox"
+
+div.innerHTML=
+
+"<b>Tab "+tab+"</b>"+
+
+'<div class="sliderRow">'+
+'<button onclick="indentDown('+tab+')">◀</button>'+
+'<input type="range" min="0" max="'+tabs.length+'" value="'+(tab-1)+'" data-tab="'+tab+'">'+
+'<button onclick="indentUp('+tab+')">▶</button>'+
+'<span id="indent'+tab+'">'+(tab-1)+'</span>'+
+'</div>'+
+
+'枠色 <input type="color" value="#cccccc" data-bordercolor="'+tab+'"> '+
+
+'背景色 <input type="color" value="#fafafa" data-bg="'+tab+'">'
+
+box.appendChild(div)
+
+})
+
+addTabEvents()
+applyTabStyles()
+
+}
+
+function addTabEvents(){
+
+document.querySelectorAll("[data-tab]").forEach(sl=>{
+sl.addEventListener("input",e=>{
+const tab=e.target.dataset.tab
+config.tabs[tab].indent=e.target.value
+applyTabStyles()
+})
+})
+
+document.querySelectorAll("[data-bordercolor]").forEach(el=>{
+el.addEventListener("input",e=>{
+const tab=e.target.dataset.bordercolor
+config.tabs[tab].borderColor=e.target.value
+applyTabStyles()
+})
+})
+
+document.querySelectorAll("[data-bg]").forEach(el=>{
+el.addEventListener("input",e=>{
+const tab=e.target.dataset.bg
+config.tabs[tab].background=e.target.value
+applyTabStyles()
+})
+})
+
+}
+
+function applyTabStyles(){
+
+let style=doc.getElementById("editor-style")
+
+if(!style){
+
+style=doc.createElement("style")
+style.id="editor-style"
+doc.head.appendChild(style)
+
+}
+
+let css=":root{"
+
+tabs.forEach(tab=>{
+const c=config.tabs[tab]
+
+css+=`--color-${String(tab).padStart(2,"0")}:${c.borderColor};`
+
+})
+
+css+="}"
+
+tabs.forEach(tab=>{
+
+const c=config.tabs[tab]
+
+css+=`
+
+.chatlog .tab${tab}{
+margin-left:${c.indent*3}em !important;
+background:${c.background};
+border-left:4px solid ${c.borderColor};
+padding-left:4px;
+}
+
+`
+
+})
+
+style.innerHTML=css
+
+}
+
+function indentUp(tab){
+config.tabs[tab].indent++
+applyTabStyles()
+}
+
+function indentDown(tab){
+if(config.tabs[tab].indent>0) config.tabs[tab].indent--
+applyTabStyles()
+}
+
+function syncPageColor(e){
+
+config.pageColor=e.target.value
+document.getElementById("pageHex").value=e.target.value
+applyPageColor()
+
+}
+
+function syncPageHex(e){
+
+config.pageColor=e.target.value
+document.getElementById("pageColor").value=e.target.value
+applyPageColor()
+
+}
+
+function applyPageColor(){
+
+if(!doc)return
+
+doc.body.style.background=config.pageColor
+applyTabStyles()
+
+}
+
+function saveTheme(){
+
+const blob=new Blob([JSON.stringify(config)])
+const a=document.createElement("a")
+
+a.href=URL.createObjectURL(blob)
+a.download="theme.json"
+
+a.click()
+
+}
+
+function loadTheme(e){
+
+const reader=new FileReader()
+
+reader.onload=ev=>{
+
+config=JSON.parse(ev.target.result)
+
+applyPageColor()
+applyUserColors()
+applyTabStyles()
+
+}
+
+reader.readAsText(e.target.files[0])
+
+}
+
+function saveHTML(){
+
+const html=doc.documentElement.cloneNode(true)
+
+const blob=new Blob([html.outerHTML],{type:"text/html"})
+
+const a=document.createElement("a")
+
+a.href=URL.createObjectURL(blob)
+a.download=document.getElementById("filename").value+".html"
+
+a.click()
+
+}
+
+function savePDF(){
+
+html2pdf(doc.body)
+
+}
+
+</script>
+
+</body>
+</html>
+```
